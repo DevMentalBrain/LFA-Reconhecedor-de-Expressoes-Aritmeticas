@@ -1,4 +1,4 @@
-require_relative '../src/parser/early'
+require_relative '../src/parser/earley'
 require_relative '../src/gramatica'
 
 # Função auxiliar para rodar um teste e verificar se o resultado foi o esperado

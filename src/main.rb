@@ -1,4 +1,5 @@
-require_relative 'parser/early'
+require_relative 'parser/earley'
+# require_relative 'parser/cyk'
 require_relative 'gramatica'
 
 if ARGV.empty?
@@ -12,6 +13,5 @@ tokens = expressao.gsub(/\s+/, '').split('')
 analisador_earley = AnalisadorEarley.new(Gramatica.new, tokens[0])
 analisador_earley.analisar(tokens)
 
-# analisador_chumsky = AnalisadorChumsky.new(Gramatica.new, tokens[0])
-# analisador_chumsky.analisar(tokens)
-
+# analisador_cyk = AnalisadorCYK.new(Gramatica.new, tokens[0])
+# analisador_cyk.analisar(tokens)
