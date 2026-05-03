@@ -1,34 +1,40 @@
 require_relative '../src/parser/early'
-require_relative '../src/grammar'
+require_relative '../src/gramatica'
 
-def assert_parse(parser, tokens_str, expected)
-  tokens = tokens_str.gsub(/\s+/, '').split('')
+# Função auxiliar para rodar um teste e verificar se o resultado foi o esperado
+def validar_expressao(analisador, texto_expressao, esperado_valido)
+  # Tokenizador simples: Remove espaços e quebra a string em caracteres individuais
+  tokens = texto_expressao.gsub(/\s+/, '').split('')
   
-  puts "\nTeste: \"#{tokens_str}\""
-  result = parser.parse(tokens)
+  puts "\nTestando: \"#{texto_expressao}\""
+  resultado = analisador.analisar(tokens)
   
-  if result == expected
-    puts "✅ PASSOU: #{tokens_str} foi #{expected ? 'aceito' : 'rejeitado'} como esperado."
+  if resultado == esperado_valido
+    status = esperado_valido ? "aceita" : "rejeitada"
+    puts "✅ SUCESSO: A expressão foi #{status} como esperado."
   else
-    puts "❌ FALHOU: #{tokens_str} deveria ter sido #{expected ? 'aceito' : 'rejeitado'}."
+    status_errado = resultado ? "aceita" : "rejeitada"
+    status_esperado = esperado_valido ? "aceita" : "rejeitada"
+    puts "❌ FALHA: A expressão foi #{status_errado}, mas deveria ser #{status_esperado}."
     exit 1
   end
 end
 
-parser = EarleyParser.new($grammar, 'S')
+# Criamos o analisador com a nossa gramática começando pelo símbolo 'S'
+analisador = AnalisadorEarley.new($gramatica, 'S')
 
-puts "=== EXECUTANDO TESTES DO PARSER EARLEY ==="
+puts "=== INICIANDO TESTES DO ANALISADOR DE EARLEY ==="
 
-# Valid expressions
-valid_expressions = [
+# Exemplos de expressões válidas
+expressoes_validas = [
   "(1 + 4) * 2^4",
   "7 / ( 1 - 3 )",
   "9^(1 * 6 / 2 + 4)",
   "2 + 4 ^ -4 / 4"
 ]
 
-# Invalid expressions
-invalid_expressions = [
+# Exemplos de expressões inválidas
+expressoes_invalidas = [
   "^ 2 + 4",
   "9 * 2 +",
   "9 + + 3",
@@ -36,12 +42,14 @@ invalid_expressions = [
   "( 3 + 3"
 ]
 
-valid_expressions.each do |expr|
-  assert_parse(parser, expr, true)
+puts "\n--- Verificando expressões que DEVEM ser aceitas ---"
+expressoes_validas.each do |expr|
+  validar_expressao(analisador, expr, true)
 end
 
-invalid_expressions.each do |expr|
-  assert_parse(parser, expr, false)
+puts "\n--- Verificando expressões que DEVEM ser rejeitadas ---"
+expressoes_invalidas.each do |expr|
+  validar_expressao(analisador, expr, false)
 end
 
-puts "\n✨ Todos os testes foram executados com sucesso! ✨"
+puts "\n✨ Todos os testes passaram com sucesso!"

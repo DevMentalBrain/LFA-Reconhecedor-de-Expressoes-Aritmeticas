@@ -1,134 +1,102 @@
-class Rule
-  attr_reader :left, :right
+require_relative '../estado'
+require_relative '../regra'
 
-  def initialize(left, right)
-    @left = left  # String: Lado esquerdo (Ex: 'E')
-    @right = right  # Array de Strings: Lado direito (Ex: ['E', '+', 'T'])
+# O Analisador (Parser) de Earley propriamente dito
+class AnalisadorEarley
+  def initialize(gramatica, simbolo_inicial)
+    @gramatica = gramatica
+    @simbolo_inicial = simbolo_inicial
   end
 
-  def to_s
-    "#{@left} -> #{@right.join(' ')}"
-  end
-end
-
-# Estado específico da gramática
-class State
-  attr_reader :rule, :dot, :origin
-
-  def initialize(rule, dot, origin)
-    @rule = rule
-    @dot = dot          # Posição do '•' no array right
-    @origin = origin    # De qual conjunto S[k] essa regra nasceu
-  end
-
-  # O ponto chegou no final da regra?
-  def complete?
-    @dot >= @rule.right.length
-  end
-
-  # Qual é o símbolo depois do ponto?
-  def next_symbol
-    @rule.right[@dot]
-  end
-
-  # Sobrescrita de igualdade para evitar regras duplicadas no Array
-  def ==(other)
-    @rule == other.rule && @dot == other.dot && @origin == other.origin
-  end
-
-  def to_s
-    right_str = @rule.right.dup
-    right_str.insert(@dot, "•")
-    "#{@rule.left} -> #{right_str.join(' ')} | [#{@origin}]"
-  end
-end
-
-class EarleyParser
-  def initialize(grammar, start_symbol)
-    @grammar = grammar
-    @start_symbol = start_symbol
-  end
-
-  def parse(tokens)
+  # Função principal que tenta validar uma lista de tokens (palavras/símbolos)
+  def analisar(tokens)
     @tokens = tokens
-    @S = Array.new(tokens.length + 1) { [] } # Nossa matriz de estados S
+    # Criamos uma tabela (Chart) onde cada entrada S[i] guarda os estados possíveis no passo i
+    @S = Array.new(tokens.length + 1) { [] }
 
-    # 1. Cria uma regra falsa para iniciar o parser
-    dummy_rule = Rule.new('START', [@start_symbol])
-    enqueue(State.new(dummy_rule, 0, 0), 0)
+    # PASSO INICIAL: Criamos uma regra "mágica" para começar a análise
+    regra_inicial = Regra.new('START', [@simbolo_inicial])
+    adicionar_estado(Estado.new(regra_inicial, 0, 0), 0)
 
-    # 2. Loop Principal
+    # Percorremos cada posição da frase (de 0 até o final)
     (0..tokens.length).each do |i|
-      state_idx = 0
-      puts "\n\n--- PASSO #{i} ---"
+      indice_estado = 0
       
-      # Usamos um while pq o tamanho de @S[i] cresce dinamicamente durante a execução
-      while state_idx < @S[i].length
-        state = @S[i][state_idx]
+      # Processamos todos os estados encontrados para esta posição i
+      # O loop 'while' é usado porque novos estados podem ser adicionados enquanto rodamos
+      while indice_estado < @S[i].length
+        estado = @S[i][indice_estado]
 
-        if state.complete?
-          completer(state, i)
-          puts "[COMPLETAR] #{state}"
-        elsif non_terminal?(state.next_symbol)
-          predictor(state, i)
-          puts "[PREDIÇÃO] #{state}"
+        if estado.completo?
+          # Se a regra terminou, avisamos quem estava esperando por ela
+          completar(estado, i)
+        elsif nao_terminal?(estado.proximo_simbolo)
+          # Se o próximo símbolo é uma variável (ex: S, A), expandimos suas possibilidades
+          predizer(estado, i)
         else
-          scanner(state, i)
-          puts "[LEITURA] #{state}"
+          # Se o próximo símbolo é um caractere fixo (ex: '+', '1'), tentamos ler da entrada
+          escannear(estado, i)
         end
 
-        state_idx += 1
+        indice_estado += 1
       end
     end
 
-    # 3. A regra falsa inicial conseguiu fechar até o último conjunto?
-    success_state = State.new(dummy_rule, 1, 0)
+    # VEREDITO: Se encontrarmos a regra mágica completa no final, a frase é válida!
+    estado_sucesso = Estado.new(regra_inicial, 1, 0)
     
-    puts "\n--- RESULTADO ---"
-    if @S[tokens.length].any? { |s| s == success_state }
-      puts "Expressão Válida!"
+    if @S[tokens.length].any? { |s| s == estado_sucesso }
+      puts "Resultado: Expressão Válida!"
       return true
     else
-      puts "Erro de Sintaxe!"
+      puts "Resultado: Erro de Sintaxe!"
       return false
     end
   end
 
   private
 
-  def predictor(state, i)
-    non_terminal = state.next_symbol
-    @grammar.each do |rule|
-      if rule.left == non_terminal
-        enqueue(State.new(rule, 0, i), i)
+  # PREDIZER: Para um símbolo não-terminal (como 'S'), adiciona todas as suas regras à lista
+  def predizer(estado, i)
+    nao_terminal = estado.proximo_simbolo
+    @gramatica.each do |regra|
+      if regra.lado_esquerdo == nao_terminal
+        adicionar_estado(Estado.new(regra, 0, i), i)
       end
     end
   end
 
-  def scanner(state, i)
-    if i < @tokens.length && state.next_symbol == @tokens[i]
-      enqueue(State.new(state.rule, state.dot + 1, state.origin), i + 1)
+  # ESCANNEAR: Se o símbolo atual da frase bate com o que a regra espera, avançamos o ponto
+  def escannear(estado, i)
+    if i < @tokens.length && estado.proximo_simbolo == @tokens[i]
+      # Movemos o ponto uma posição para a frente e jogamos para o próximo conjunto S[i+1]
+      adicionar_estado(Estado.new(estado.regra, estado.ponto + 1, estado.origem), i + 1)
     end
   end
 
-  def completer(state, i)
-    origin = state.origin
-    @S[origin].each do |old_state|
-      if !old_state.complete? && old_state.next_symbol == state.rule.left
-        enqueue(State.new(old_state.rule, old_state.dot + 1, old_state.origin), i)
+  # COMPLETAR: Quando uma regra termina, voltamos na origem para ver quem estava esperando esse símbolo
+  def completar(estado, i)
+    origem = estado.origem
+    simbolo_concluido = estado.regra.lado_esquerdo
+
+    @S[origem].each do |estado_antigo|
+      if !estado_antigo.completo? && estado_antigo.proximo_simbolo == simbolo_concluido
+        # Avançamos o ponto de quem estava esperando
+        adicionar_estado(Estado.new(estado_antigo.regra, estado_antigo.ponto + 1, estado_antigo.origem), i)
       end
     end
   end
 
-  # --- UTILITÁRIOS ---
-
-  def enqueue(state, chart_index)
-    unless @S[chart_index].any? { |s| s == state }
-      @S[chart_index] << state
+  # Adiciona um estado à lista, mas apenas se ele já não estiver lá (evita loops infinitos)
+  def adicionar_estado(estado, indice_tabela)
+    unless @S[indice_tabela].any? { |s| s == estado }
+      @S[indice_tabela] << estado
     end
   end
 
-  def non_terminal?(symbol)
-    symbol.match?(/^[A-Z]/) || symbol == 'START'
+  # Verifica se um símbolo é um "Não-Terminal" (Variável)
+  # Por convenção, usamos letras MAIÚSCULAS para variáveis.
+  def nao_terminal?(simbolo)
+    simbolo.match?(/^[A-Z]/) || simbolo == 'START'
   end
 end
