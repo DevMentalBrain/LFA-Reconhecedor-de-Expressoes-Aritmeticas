@@ -1,4 +1,4 @@
-require_relative './parser/early'
+require_relative './utils/regra'
 
 # Definição da Gramática para Expressões Matemáticas
 $gramatica = [
