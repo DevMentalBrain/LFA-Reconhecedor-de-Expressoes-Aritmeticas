@@ -1,8 +1,8 @@
-require_relative '../src/parser/earley'
+require_relative '../src/parser/cyk'
 require_relative '../src/gramatica'
 require_relative 'casos_de_teste'
 
-def validar_earley(analisador, texto_expressao, esperado)
+def validar_cyk(analisador, texto_expressao, esperado)
   tokens = texto_expressao.gsub(/\s+/, '').split('')
   
   puts "\nTestando: \"#{texto_expressao}\""
@@ -19,18 +19,18 @@ def validar_earley(analisador, texto_expressao, esperado)
   end
 end
 
-analisador = AnalisadorEarley.new($gramatica_earley, 'S')
+analisador = AnalisadorCYK.new($gramatica_fnc, 'S')
 
-puts "=== INICIANDO TESTES DO ANALISADOR DE EARLEY (AST) ==="
+puts "=== INICIANDO TESTES DO ANALISADOR CYK (AST) ==="
 
 puts "\n--- Verificando expressões válidas (AST) ---"
 CASOS_VALIDOS.each do |expr, ast_esperado|
-  validar_earley(analisador, expr, ast_esperado)
+  validar_cyk(analisador, expr, ast_esperado)
 end
 
 puts "\n--- Verificando expressões inválidas ---"
 EXPRESSOES_INVALIDAS.each do |expr|
-  validar_earley(analisador, expr, "Erro de Sintaxe!")
+  validar_cyk(analisador, expr, "Erro de Sintaxe!")
 end
 
-puts "\n✨ Todos os testes de Earley (AST) passaram com sucesso!"
+puts "\n✨ Todos os testes do CYK (AST) passaram com sucesso!"

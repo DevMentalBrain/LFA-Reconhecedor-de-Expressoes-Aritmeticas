@@ -1,5 +1,5 @@
 require_relative 'parser/earley'
-# require_relative 'parser/cyk'
+require_relative 'parser/cyk'
 require_relative 'gramatica'
 
 if ARGV.empty?
@@ -10,8 +10,12 @@ end
 expressao = ARGV[0]
 tokens = expressao.gsub(/\s+/, '').split('')
 
-analisador_earley = AnalisadorEarley.new(Gramatica.new, tokens[0])
-analisador_earley.analisar(tokens)
+puts "--- ANALISANDO COM EARLEY ---"
+analisador_earley = AnalisadorEarley.new($gramatica_earley, 'S')
+resultado_earley = analisador_earley.analisar(tokens)
+p resultado_earley
 
-# analisador_cyk = AnalisadorCYK.new(Gramatica.new, tokens[0])
-# analisador_cyk.analisar(tokens)
+puts "\n--- ANALISANDO COM CYK ---"
+analisador_cyk = AnalisadorCYK.new($gramatica_fnc, 'S')
+resultado_cyk = analisador_cyk.analisar(tokens)
+p resultado_cyk

@@ -3,12 +3,14 @@ require_relative '../utils/regra'
 # Representa um "Estado" ou hipótese dentro do algoritmo de Earley
 # Um estado é uma regra com um "ponto" (•) que indica o quanto já processamos dela.
 class Estado
-  attr_reader :regra, :ponto, :origem
+  attr_reader :regra, :ponto, :origem, :filhos, :valor_terminal
 
   def initialize(regra, ponto, origem)
     @regra = regra
     @ponto = ponto      # Inteiro: Posição do '•' no array lado_direito
     @origem = origem    # Inteiro: Em qual posição da frase essa regra começou (S[k])
+    @filhos = []        # Lista de estados que completaram os símbolos desta regra
+    @valor_terminal = nil # Valor caso seja um terminal (ex: '1', '+')
   end
 
   # Verifica se o ponto chegou ao fim da regra (regra totalmente processada)
@@ -31,6 +33,10 @@ class Estado
     copia_dir = @regra.lado_direito.dup
     copia_dir.insert(@ponto, "•")
     "#{@regra.lado_esquerdo} -> #{copia_dir.join(' ')} | [#{@origem}]"
+  end
+
+  def set_valor_terminal(v)
+    @valor_terminal = v
   end
 end
 
@@ -76,13 +82,12 @@ class AnalisadorEarley
 
     # Se encontrarmos a regra mágica completa no final, a expressão é válida!
     estado_sucesso = Estado.new(regra_inicial, 1, 0)
+    final_state = @S[tokens.length].find { |s| s == estado_sucesso }
     
-    if @S[tokens.length].any? { |s| s == estado_sucesso }
-      puts "Resultado: Expressão Válida!"
-      return true
+    if final_state
+      return extrair_ast(final_state)
     else
-      puts "Resultado: Erro de Sintaxe!"
-      return false
+      return "Erro de Sintaxe!"
     end
   end
 
@@ -101,8 +106,15 @@ class AnalisadorEarley
   # LEITURA: Se o símbolo atual da frase bate com o que a regra espera, avançamos o ponto
   def leitura(estado, i)
     if i < @tokens.length && estado.proximo_simbolo == @tokens[i]
-      # Movemos o ponto uma posição para a frente e jogamos para o próximo conjunto S[i+1]
-      adicionar_estado(Estado.new(estado.regra, estado.ponto + 1, estado.origem), i + 1)
+      novo_estado = Estado.new(estado.regra, estado.ponto + 1, estado.origem)
+      novo_estado.filhos.concat(estado.filhos)
+      
+      # Criamos um estado "folha" para o terminal
+      folha = Estado.new(Regra.new(estado.proximo_simbolo, []), 0, i)
+      folha.set_valor_terminal(@tokens[i])
+      novo_estado.filhos << folha
+      
+      adicionar_estado(novo_estado, i + 1)
     end
   end
 
@@ -113,21 +125,64 @@ class AnalisadorEarley
 
     @S[origem].each do |estado_antigo|
       if !estado_antigo.completo? && estado_antigo.proximo_simbolo == simbolo_concluido
-        # Avançamos o ponto de quem estava esperando
-        adicionar_estado(Estado.new(estado_antigo.regra, estado_antigo.ponto + 1, estado_antigo.origem), i)
+        novo_estado = Estado.new(estado_antigo.regra, estado_antigo.ponto + 1, estado_antigo.origem)
+        novo_estado.filhos.concat(estado_antigo.filhos)
+        novo_estado.filhos << estado
+        
+        adicionar_estado(novo_estado, i)
       end
     end
   end
 
   # Adiciona um estado à lista, mas apenas se ele já não estiver lá (evita loops infinitos)
   def adicionar_estado(estado, indice_tabela)
-    unless @S[indice_tabela].any? { |s| s == estado }
-      @S[indice_tabela] << estado
+    existente = @S[indice_tabela].find { |s| s == estado }
+    if existente
+      # Se já existe um estado com os mesmos filhos, não adicionamos
+      # Para Earley parsing correto com AST, a igualdade deve considerar os filhos se quisermos todas as árvores.
+      # Mas aqui vamos simplificar para a primeira árvore encontrada.
+      if existente.filhos == estado.filhos
+        return existente
+      end
+      # Se filhos são diferentes, é uma ambiguidade. Vamos adicionar.
+    end
+    
+    @S[indice_tabela] << estado
+    return estado
+  end
+
+  def extrair_ast(estado)
+    # Se for um terminal puro
+    return estado.valor_terminal if estado.valor_terminal
+
+    # Processa os filhos recursivamente
+    filhos_ast = estado.filhos.map { |f| extrair_ast(f) }.compact
+    
+    # Se a regra tem um rótulo AST (ex: 'soma'), criamos o array
+    if estado.regra.rotulo_ast
+      if estado.regra.rotulo_ast == 'numero'
+        # Achata os dígitos em um número inteiro
+        return filhos_ast.join('').to_i
+      else
+        # Filtra símbolos de pontuação/formatação ( (, ), +, -, *, /, ^ )
+        # mas mantém os resultados dos sub-nós (que são Arrays ou Inteiros)
+        argumentos = filhos_ast.select { |f| f.is_a?(Array) || f.is_a?(Integer) }
+        return [estado.regra.rotulo_ast, *argumentos]
+      end
+    end
+
+    # Se não tem rótulo, é uma regra ponte (ex: S -> A)
+    # Retorna apenas o conteúdo útil
+    if filhos_ast.length == 1
+      return filhos_ast[0]
+    else
+      # Caso complexo de ponte (ex: ( S ) )
+      util = filhos_ast.select { |f| f.is_a?(Array) || f.is_a?(Integer) }
+      return util.length == 1 ? util[0] : util
     end
   end
 
   # Verifica se um símbolo é um "Não-Terminal" (Variável)
-  # Por convenção, usamos letras MAIÚSCULAS para variáveis.
   def nao_terminal?(simbolo)
     simbolo.match?(/^[A-Z]/) || simbolo == 'START'
   end
